@@ -1,0 +1,46 @@
+pipeline { 
+
+    agent any 
+    
+    options {
+        timestamps ()
+        
+    }
+
+    tools {
+        maven 'Maven-3.8.4'
+    }
+    
+    stages {
+        stage ("Git Checkout") {
+            steps {
+                git credentialsId: 'GIT_HUB_CREDENTIALS', url: 'https://github.com/joshking1/myRepoForJavaApp.git'
+            }
+        }
+        stage ("Maven Clean Build") {
+            steps {
+                sh 'mvn clean install -f MyWebApp/pom.xml'
+            }
+        }
+        stage ("SonarQube Analysis") {
+            steps {
+                withSonarQubeEnv('josh') { 
+                    sh 'mvn clean install -f MyWebApp/pom.xml sonar:sonar'
+                }
+            }
+        }
+        
+        stage ("Docker Images") {
+            steps {
+                sh 'docker images'
+            }
+        }
+        stage ("Docker Version") {
+            steps {
+                sh 'docker -v'
+            
+            }
+        }
+        
+    }
+}
