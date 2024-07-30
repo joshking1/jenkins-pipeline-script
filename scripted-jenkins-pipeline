@@ -10,7 +10,7 @@ node {
         sh "mvn verify"
     }
     stage('SonarQube Analysis') {
-        def mvnHome =  tool name: 'Maven-3.8.4', type: 'maven'
+        def mvnHome =  tool name: 'Maven-3.8.6', type: 'maven'
         withSonarQubeEnv('josh') { 
           sh "${mvnHome}/bin/mvn sonar:sonar"
         }
