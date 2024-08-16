@@ -1,0 +1,61 @@
+node {
+    def mvnHome = tool name: "Maven-3.8.6", type: "maven"
+
+    stage("Git Clone") {
+        git credentialsId: 'GIT_HUB_CREDENTIALS', url: 'https://github.com/joshking1/spring-boot-mongo-docker.git'
+    }
+    
+    stage('Maven Clean Build') {
+        sh "${mvnHome}/bin/mvn clean package"
+    }
+    
+    stage('SonarQube Analysis') {
+        withSonarQubeEnv('josh') { 
+            sh "${mvnHome}/bin/mvn sonar:sonar"
+        }
+    }
+
+    stage("Upload Artifacts to JFrog Artifactory") {
+        script {
+            // Use the predefined JFrog Artifactory server instance
+            def jfrogInstance = Artifactory.server 'j-frog-artifactory'
+            
+            // Extract artifactId and version from the pom.xml
+            def artifactId = sh(returnStdout: true, script: "mvn -q -Dexec.executable=echo -Dexec.args='${project.artifactId}' --non-recursive exec:exec").trim()
+            def version = sh(returnStdout: true, script: "mvn -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec").trim()
+            def jarName = "${artifactId}-${version}.jar"
+            
+            def uploadSpec = """{
+                "files": [
+                    {
+                        "pattern": "target/${jarName}",
+                        "target": "libs-release-local/"
+                    }
+                ]
+            }"""
+            jfrogInstance.upload spec: uploadSpec
+        }
+    }
+
+    stage("Build Docker Image") {
+        sh "docker build -t king-httpd ."
+    }
+
+    stage("Docker Image list") {
+        sh "docker image list"
+    }
+
+    stage("Docker Image Tag") {
+        sh "docker tag king-httpd josh1991/king-httpd:king-httpd"
+    }
+    
+    stage("Docker Login to Hub Docker") {
+        withCredentials([string(credentialsId: 'DOCKER_HUB_PASSWORD', variable: 'PASSWORD')]) {
+            sh 'docker login -u josh1991 -p $PASSWORD'
+        }
+    }
+     
+    stage("Docker Image Push") {
+        sh "docker push josh1991/king-httpd:king-httpd"
+    }
+}
