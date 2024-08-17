@@ -15,27 +15,44 @@ node {
         }
     }
 
-    stage("Upload Artifacts to JFrog Artifactory") {
-        script {
-            // Use the predefined JFrog Artifactory server instance
-            def jfrogInstance = Artifactory.server 'j-frog-artifactory'
-            
-            // Extract artifactId and version from the pom.xml
-            def artifactId = sh(returnStdout: true, script: "mvn -q -Dexec.executable=echo -Dexec.args='${project.artifactId}' --non-recursive exec:exec").trim()
-            def version = sh(returnStdout: true, script: "mvn -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec").trim()
-            def jarName = "${artifactId}-${version}.jar"
-            
-            def uploadSpec = """{
-                "files": [
-                    {
-                        "pattern": "target/${jarName}",
-                        "target": "libs-release-local/"
+    pipeline {
+    agent any
+    stages {
+        stage('Upload Artifact to JFrog Artifactory') {
+            steps {
+                script {
+                    def retries = 3
+                    def success = false
+                    def jfrogInstance = Artifactory.server('jfrog')
+                    
+                    for (int i = 0; i < retries && !success; i++) {
+                        try {
+                            def uploadSpec = """{
+                                "files": [
+                                    {
+                                        "pattern": "target/*.jar",
+                                        "target": "libs-release-local/"
+                                    }
+                                ]
+                            }"""
+                            jfrogInstance.upload spec: uploadSpec
+                            success = true
+                        } catch (Exception e) {
+                            echo "Upload failed: ${e.getMessage()}"
+                            if (i < retries - 1) {
+                                echo "Retrying upload... (${i + 1}/${retries})"
+                                sleep(10)  // Optional: wait 10 seconds before retrying
+                            } else {
+                                error("Failed to upload artifact after ${retries} attempts")
+                            }
+                        }
                     }
-                ]
-            }"""
-            jfrogInstance.upload spec: uploadSpec
+                }
+            }
         }
     }
+}
+
 
     stage("Build Docker Image") {
         sh "docker build -t king-httpd ."
